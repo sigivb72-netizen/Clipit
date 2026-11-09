@@ -93,6 +93,8 @@ class ClipService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Android requires this after every startForegroundService call, even if we stop right away.
+        goForeground(Downloader.active.value)
         when (intent?.action) {
             ACTION_CANCEL -> Downloader.cancel(this, intent.getLongExtra(EXTRA_ID, 0))
             ACTION_RETRY -> Downloader.redownload(this, intent.getLongExtra(EXTRA_ID, 0))
@@ -132,7 +134,9 @@ class ClipService : Service() {
             Prefs.watching = on
             if (on) start(context)
             ClipAccessibilityService.refresh()
-            TileService.requestListeningState(context, ComponentName(context, WatchTileService::class.java))
+            runCatching {
+                TileService.requestListeningState(context, ComponentName(context, WatchTileService::class.java))
+            }
         }
     }
 }

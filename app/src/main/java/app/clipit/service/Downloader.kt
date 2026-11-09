@@ -89,6 +89,14 @@ object Downloader {
             scope.launch {
                 try {
                     execute(app, item, run)
+                } catch (e: Throwable) {
+                    Repo.update(item.id) {
+                        put("status", Status.FAILED)
+                        put("error", "Unexpected error: ${e.message ?: e.javaClass.simpleName}")
+                        put("error_code", "other")
+                        put("finished", System.currentTimeMillis())
+                    }
+                    Notify.cancel(app, item.id)
                 } finally {
                     running.remove(item.id)
                     Repo.setProgress(item.id, null)
@@ -171,7 +179,7 @@ object Downloader {
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             errorCode = "engine"
             errorMessage = "Could not start the download engine: ${e.message ?: e.javaClass.simpleName}"
             null
@@ -220,7 +228,7 @@ object Downloader {
             }
             Sites.forUrl(context, item.url)?.let { Sites.setStale(context, it.id, false) }
             Repo.get(id)?.let { Notify.done(context, it) }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Repo.update(id) {
                 put("status", Status.FAILED)
                 put("error", "Could not save to Download/${MediaSaver.FOLDER}: ${e.message}")
