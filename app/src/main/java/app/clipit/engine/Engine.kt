@@ -107,7 +107,10 @@ object Engine {
             jobFile.writeText(job.toString())
             val process = ProcessBuilder(p.python.absolutePath, p.script.absolutePath, jobFile.absolutePath)
                 .redirectErrorStream(true)
-                .apply { environment().putAll(p.env) }
+                .apply {
+                    environment().putAll(p.env)
+                    environment().putAll(proxyEnv())
+                }
                 .start()
             onProcess(process)
             val tail = ArrayDeque<String>()
@@ -125,6 +128,17 @@ object Engine {
         } finally {
             jobFile.delete()
         }
+    }
+
+    /**
+     * Python does not see Android's network settings, so a proxy configured
+     * on the Wi-Fi network (or device-wide) is handed over explicitly.
+     */
+    private fun proxyEnv(): Map<String, String> {
+        val host = System.getProperty("https.proxyHost")?.takeIf { it.isNotBlank() } ?: return emptyMap()
+        val port = System.getProperty("https.proxyPort")?.toIntOrNull() ?: 8080
+        val proxy = "http://$host:$port"
+        return mapOf("HTTPS_PROXY" to proxy, "https_proxy" to proxy, "HTTP_PROXY" to proxy, "http_proxy" to proxy)
     }
 
     /** Versions of the bundled tools, e.g. "yt-dlp 2025.11.12 · gallery-dl 1.32.19". */
