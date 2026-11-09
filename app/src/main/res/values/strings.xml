@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Clip It</string>
+    <string name="grab_label">Download with Clip It</string>
+    <string name="tile_watch">Clip It</string>
+    <string name="tile_grab">Grab copied link</string>
+    <string name="accessibility_label">Clip It instant grab</string>
+    <string name="accessibility_description">Lets Clip It notice when you copy a link in another app so the download can start by itself. Clip It only looks for the moment something is copied; it does not read or store what is on your screen.</string>
+</resources>
