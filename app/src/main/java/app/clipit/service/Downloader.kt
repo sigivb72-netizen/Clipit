@@ -181,7 +181,9 @@ object Downloader {
             }
         } catch (e: Throwable) {
             errorCode = "engine"
-            errorMessage = "Could not start the download engine: ${e.message ?: e.javaClass.simpleName}"
+            errorMessage = "Could not start the download engine: " +
+                generateSequence(e) { it.cause }.take(4).joinToString(" ← ") { "${it.javaClass.simpleName}: ${it.message}" }
+            android.util.Log.e("ClipIt", "engine start failed", e)
             null
         }
 
