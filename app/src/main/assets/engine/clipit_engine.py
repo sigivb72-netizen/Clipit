@@ -17,8 +17,11 @@ Job fields:
   qjs         path to a QuickJS binary (YouTube needs a JS runtime), or null
   cache_dir   directory for yt-dlp / gallery-dl caches
   engine      "auto" | "gallery-dl" | "yt-dlp"
+  archives    wheels / zipapps holding gallery-dl, yt-dlp and dependencies
+  lib_dir     where those archives are unpacked so bytecode can be cached
 """
 
+import importlib
 import json
 import logging
 import os
@@ -452,13 +455,63 @@ def gdl_configure(job):
                    os.path.join(job["cache_dir"], "gallery-dl.sqlite3"))
 
 
+# Hosts gallery-dl has no extractor of its own for: skip straight to yt-dlp.
+YTDLP_HOSTS = ("youtube.com", "youtu.be", "youtube-nocookie.com", "vimeo.com",
+               "dailymotion.com", "dai.ly", "twitch.tv", "soundcloud.com",
+               "rumble.com", "odysee.com", "kick.com", "bitchute.com", "ted.com")
+
+# Hosts whose gallery-dl module is not simply named after the domain.
+MODULE_HINTS = {"x.com": "twitter", "t.co": "twitter", "redd.it": "reddit",
+                "fb.watch": "facebook", "fb.com": "facebook", "pin.it": "pinterest",
+                "instagr.am": "instagram", "bsky.app": "bluesky",
+                "threads.com": "threads", "threads.net": "threads",
+                "b23.tv": "bilibili", "vk.ru": "vk"}
+
+
+def host_of(url):
+    match = re.match(r"https?://([^/?#:]+)", url or "", re.I)
+    host = match.group(1).lower() if match else ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def host_matches(host, names):
+    return any(host == name or host.endswith("." + name) for name in names)
+
+
+def find_extractor(url):
+    """extractor.find(), but trying the module the host points at first.
+
+    gallery-dl otherwise imports its few hundred site modules one by one
+    until a pattern matches, which costs seconds on a phone for every link.
+    """
+    from gallery_dl import extractor
+
+    host = host_of(url)
+    hints = [name for domain, name in MODULE_HINTS.items()
+             if host_matches(host, (domain,))]
+    squashed = re.sub(r"[^a-z0-9]", "", host)
+    hints += [name for name in extractor.modules
+              if len(name) >= 4 and name in squashed and name not in hints]
+    for name in hints:
+        try:
+            module = importlib.import_module("gallery_dl.extractor." + name)
+            for cls in extractor.add_module(module) or ():
+                match = cls.pattern.match(url)
+                if match:
+                    return cls(match)
+        except Exception as exc:
+            sys.stderr.write("extractor hint %s: %r\n" % (name, exc))
+    return extractor.find(url)
+
+
 def run_gallery(job):
     """Returns (files, error_message, status) or None if no extractor matches."""
     import gallery_dl
     from gallery_dl import extractor, job as gjob, output
 
     gdl_configure(job)
-    if extractor.find(job["url"]) is None:
+    found = find_extractor(job["url"])
+    if found is None:
         return None
 
     emit("engine", name="gallery-dl", version=gallery_dl.version.__version__)
@@ -489,7 +542,7 @@ def run_gallery(job):
             gjob.DownloadJob.handle_url(self, url, kwdict)
 
     try:
-        status = ClipJob(job["url"]).run()
+        status = ClipJob(found).run()
     except Exception as exc:
         return out.files, "%s: %s" % (exc.__class__.__name__, exc), 1
     if out.files:
@@ -536,6 +589,8 @@ def download(job):
     engine = job.get("engine") or "auto"
     try:
         errors = []
+        if engine == "auto" and host_matches(host_of(job["url"]), YTDLP_HOSTS):
+            engine = "yt-dlp"
         if engine in ("auto", "gallery-dl"):
             result = run_gallery(job)
             if result is not None:
@@ -567,6 +622,42 @@ def download(job):
                 pass
 
 
+def use_unpacked(job):
+    """Import the tools from unpacked folders instead of their archives.
+
+    Python cannot cache bytecode for code inside a zip, so importing straight
+    from the wheels recompiles everything on every run. Unpacking each archive
+    once lets the interpreter keep .pyc files beside the sources.
+    """
+    lib, archives = job.get("lib_dir"), job.get("archives") or []
+    if not lib or not archives:
+        return
+    import fcntl
+    import zipfile
+
+    os.makedirs(lib, exist_ok=True)
+    paths, keep = [], {".lock"}
+    with open(os.path.join(lib, ".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)  # two downloads may start together
+        for source in archives:
+            info = os.stat(source)
+            name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(source))
+            tag = "%s-%d-%d" % (name, info.st_size, int(info.st_mtime))
+            target = os.path.join(lib, tag)
+            if not os.path.isdir(target):
+                partial = target + ".tmp"
+                shutil.rmtree(partial, ignore_errors=True)
+                with zipfile.ZipFile(source) as archive:
+                    archive.extractall(partial)
+                os.rename(partial, target)
+            keep.add(tag)
+            paths.append(target)
+        for entry in os.listdir(lib):  # left over from older versions
+            if entry not in keep:
+                shutil.rmtree(os.path.join(lib, entry), ignore_errors=True)
+    sys.path[:0] = paths
+
+
 def terminate(signum, frame):
     # Take ffmpeg and any other children down with us when the app cancels.
     try:
@@ -585,6 +676,10 @@ def main():
     signal.signal(signal.SIGTERM, terminate)
     with open(sys.argv[1], encoding="utf-8") as fp:
         job = json.load(fp)
+    try:
+        use_unpacked(job)
+    except Exception as exc:  # fall back to importing from the archives
+        sys.stderr.write("unpack: %r\n" % (exc,))
     try:
         if job.get("mode") == "versions":
             versions()

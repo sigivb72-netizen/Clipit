@@ -22,6 +22,8 @@ object Engine {
     class Paths(
         val python: File, val script: File, val ffmpeg: File, val qjs: File,
         val env: Map<String, String>, val cacheDir: File,
+        /** gallery-dl, its dependencies and yt-dlp, in import order. */
+        val archives: List<File>, val libDir: File,
     )
 
     class Result(val exitCode: Int, val log: List<String>)
@@ -69,7 +71,8 @@ object Engine {
         val updated = Prefs.gdlWheel?.let(::File)?.takeIf { it.exists() }
         val wheels = (wheelDir.listFiles() ?: emptyArray())
             .filter { it.name.endsWith(".whl") && !(updated != null && it.name.startsWith("gallery_dl")) }
-        val pythonPath = (listOfNotNull(updated) + wheels + ytdlp).joinToString(":") { it.absolutePath }
+        val archives = listOfNotNull(updated) + wheels + ytdlp
+        val pythonPath = archives.joinToString(":") { it.absolutePath }
 
         val certs = File(pythonHome, "etc/tls/cert.pem").absolutePath
         val env = mapOf(
@@ -88,6 +91,7 @@ object Engine {
             python = File(native, "libpython.so"), script = script,
             ffmpeg = File(native, "libffmpeg.so"), qjs = File(native, "libqjs.so"),
             env = env, cacheDir = File(app.cacheDir, "engine").apply { mkdirs() },
+            archives = archives, libDir = File(engineDir, "lib"),
         ).also { paths = it }
     }
 
@@ -107,6 +111,9 @@ object Engine {
         context.applicationContext.cacheDir.mkdirs()
         p.cacheDir.mkdirs()
         job.put("cache_dir", p.cacheDir.absolutePath)
+        // The script unpacks these once so Python can cache compiled code.
+        job.put("archives", org.json.JSONArray(p.archives.map { it.absolutePath }))
+        job.put("lib_dir", p.libDir.absolutePath)
         val jobDir = File(p.script.parentFile, "jobs").apply { mkdirs() }
         val jobFile = File(jobDir, "job-${System.nanoTime()}.json")
         try {
