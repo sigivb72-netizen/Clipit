@@ -101,8 +101,14 @@ object Engine {
         val p = ensureReady(context)
         job.put("ffmpeg", p.ffmpeg.absolutePath)
         job.put("qjs", p.qjs.absolutePath)
+        // Android (and some phones' cleaners) may empty the cache folder at any
+        // time while the app sits in the background, so recreate what is needed
+        // on every run and keep the job description out of the cache entirely.
+        context.applicationContext.cacheDir.mkdirs()
+        p.cacheDir.mkdirs()
         job.put("cache_dir", p.cacheDir.absolutePath)
-        val jobFile = File.createTempFile("job", ".json", p.cacheDir)
+        val jobDir = File(p.script.parentFile, "jobs").apply { mkdirs() }
+        val jobFile = File(jobDir, "job-${System.nanoTime()}.json")
         try {
             jobFile.writeText(job.toString())
             val process = ProcessBuilder(p.python.absolutePath, p.script.absolutePath, jobFile.absolutePath)
