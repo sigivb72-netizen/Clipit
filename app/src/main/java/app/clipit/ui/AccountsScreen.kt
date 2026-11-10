@@ -93,7 +93,8 @@ fun AccountsScreen(resumes: Int) {
                 supportingContent = {
                     Text(
                         when {
-                            state.stale -> "Login expired or was rejected. Log in again."
+                            state.stale && state.loggedIn -> "Login expired or was rejected. Log in again."
+                            state.stale -> "A recent download needed this login."
                             state.loggedIn -> "Ready"
                             else -> site.note ?: "Not logged in"
                         },
