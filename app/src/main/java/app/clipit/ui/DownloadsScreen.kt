@@ -123,7 +123,7 @@ fun DownloadsScreen(snackbar: SnackbarHostState, onOpenAccounts: () -> Unit) {
                         item = item,
                         progress = progress[item.id],
                         onClick = {
-                            if (item.status == Status.DONE) openFile(context, item.files.firstOrNull())
+                            if (item.status == Status.DONE) openFile(context, item.primaryFile)
                             else menuFor = item.id
                         },
                         onLongClick = { menuFor = item.id },
@@ -290,7 +290,7 @@ private fun loadThumbnail(context: Context, file: SavedFile): ImageBitmap? {
 @Composable
 private fun Thumbnail(item: DownloadItem) {
     val context = LocalContext.current
-    val file = item.files.firstOrNull()?.takeIf { it.mime.startsWith("video") || it.mime.startsWith("image") }
+    val file = item.primaryFile?.takeIf { it.mime.startsWith("video") || it.mime.startsWith("image") }
     val image by produceState(initialValue = file?.let { thumbnails.get(it.uri) }, key1 = file?.uri) {
         if (value == null && file != null) {
             value = withContext(Dispatchers.IO) { loadThumbnail(context, file) }?.also { thumbnails.put(file.uri, it) }
@@ -376,7 +376,7 @@ private fun ActionsSheet(item: DownloadItem, onDismiss: () -> Unit, onDetails: (
                 )
             }
             if (item.status == Status.DONE) {
-                action("Open", Icons.Default.PlayArrow) { openFile(context, item.files.firstOrNull()) }
+                action("Open", Icons.Default.PlayArrow) { openFile(context, item.primaryFile) }
                 action("Share", Icons.Default.Share) { shareFiles(context, item) }
             }
             if (item.status == Status.FAILED && item.errorCode == "auth") {

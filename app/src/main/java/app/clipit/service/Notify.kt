@@ -120,7 +120,7 @@ object Notify {
     }
 
     fun done(context: Context, item: DownloadItem) {
-        val first = item.files.firstOrNull()
+        val first = item.primaryFile
         val tap = if (first != null) {
             PendingIntent.getActivity(
                 context, item.id.toInt(),

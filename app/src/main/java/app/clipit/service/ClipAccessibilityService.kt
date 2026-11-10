@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -105,7 +106,7 @@ class ClipAccessibilityService : AccessibilityService() {
             // Focusable (so the clipboard can be read) but never in the way of touches.
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
-        )
+        ).apply { gravity = Gravity.TOP or Gravity.START }
         try {
             getSystemService(WindowManager::class.java).addView(view, params)
             probe = view

@@ -295,6 +295,19 @@ def gdl_person(kwdict):
     return None, None
 
 
+PROFILE_URLS = {
+    "twitter": "https://x.com/%s",
+    "instagram": "https://www.instagram.com/%s/",
+    "tiktok": "https://www.tiktok.com/@%s",
+    "reddit": "https://www.reddit.com/user/%s",
+    "bluesky": "https://bsky.app/profile/%s",
+    "tumblr": "https://%s.tumblr.com",
+    "pinterest": "https://www.pinterest.com/%s/",
+    "deviantart": "https://www.deviantart.com/%s",
+    "threads": "https://www.threads.net/@%s",
+}
+
+
 def gdl_meta(kwdict, url):
     name, handle = gdl_person(kwdict)
     if name and handle and name != handle:
@@ -314,7 +327,10 @@ def gdl_meta(kwdict, url):
     return {
         "title": title,
         "uploader": uploader,
-        "uploader_url": first_text(kwdict, ("author_url", "user_url", "channel_url")),
+        "uploader_url": first_text(kwdict, ("author_url", "user_url", "channel_url")) or (
+            PROFILE_URLS[kwdict["category"]] % handle
+            if handle and kwdict.get("category") in PROFILE_URLS
+            and re.fullmatch(r"[\w.-]+", handle) else None),
         "site": first_text(kwdict, ("category",)),
         "post_url": first_text(kwdict, ("post_url", "permalink", "webpage_url",
                                         "tweet_url", "page_url")) or url,

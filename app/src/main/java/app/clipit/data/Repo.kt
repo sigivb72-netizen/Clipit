@@ -42,6 +42,8 @@ data class DownloadItem(
     val finished: Long,
     val size: Long,
 ) {
+    /** The file to open and preview: the video if the post has one. */
+    val primaryFile get() = files.firstOrNull { it.mime.startsWith("video") } ?: files.firstOrNull()
     val active get() = status == Status.QUEUED || status == Status.RUNNING
     val displayTitle get() = title?.takeIf { it.isNotBlank() } ?: files.firstOrNull()?.name ?: url
 }

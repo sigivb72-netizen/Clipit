@@ -108,7 +108,7 @@ fun AccountsScreen(resumes: Int) {
                     when {
                         state.stale -> Icon(Icons.Default.Warning, "Needs attention", tint = MaterialTheme.colorScheme.error)
                         state.loggedIn -> Icon(Icons.Default.CheckCircle, "Ready", tint = MaterialTheme.colorScheme.primary)
-                        else -> Text("Log in", color = MaterialTheme.colorScheme.primary)
+                        else -> Text("Log in", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                     }
                 },
                 modifier = Modifier.clickable {
