@@ -4,14 +4,17 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import app.clipit.data.Prefs
+import app.clipit.ui.GrabActivity
 import java.lang.ref.WeakReference
 
 /**
@@ -36,7 +39,7 @@ class ClipAccessibilityService : AccessibilityService() {
         applyState()
     }
 
-    override fun onUnbind(intent: android.content.Intent?): Boolean {
+    override fun onUnbind(intent: Intent?): Boolean {
         instance = null
         handler.removeCallbacksAndMessages(null)
         removeProbe()
@@ -64,6 +67,7 @@ class ClipAccessibilityService : AccessibilityService() {
             else -> false
         }
         if (!copied) return
+        Log.d(TAG, "copy noticed in ${event.packageName}")
         // Give the source app a moment to actually place the text.
         handler.removeCallbacks(readClipboard)
         handler.postDelayed(readClipboard, 350)
@@ -87,25 +91,45 @@ class ClipAccessibilityService : AccessibilityService() {
                 super.onWindowFocusChanged(hasWindowFocus)
                 if (!hasWindowFocus) return
                 post {
-                    Links.handle(this@ClipAccessibilityService, Links.clipboardText(context), auto = true)
+                    val text = Links.clipboardText(context)
+                    Log.d(TAG, "probe focused, clipboard ${if (text == null) "unreadable" else "read"}")
+                    handler.removeCallbacks(fallback)
                     removeProbe()
+                    if (text != null) Links.handle(this@ClipAccessibilityService, text, auto = true)
+                    else fallback.run()
                 }
             }
         }
         val params = WindowManager.LayoutParams(
             1, 1, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             // Focusable (so the clipboard can be read) but never in the way of touches.
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         )
         try {
             getSystemService(WindowManager::class.java).addView(view, params)
             probe = view
-            handler.postDelayed(::removeProbe, 1200)
+            handler.postDelayed(fallback, 700)
         } catch (e: Exception) {
+            Log.w(TAG, "probe window refused", e)
             probe = null
+            fallback.run()
         }
+    }
+
+    /**
+     * If the probe window is not given focus, an invisible activity is: it
+     * interrupts the foreground app for a moment but always works.
+     */
+    private val fallback = Runnable {
+        removeProbe()
+        Log.d(TAG, "probe got no focus, using the grab activity")
+        runCatching {
+            startActivity(
+                Intent(this, GrabActivity::class.java).setAction(GrabActivity.ACTION_AUTO)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
+        }.onFailure { Log.w(TAG, "grab activity refused", it) }
     }
 
     private fun removeProbe() {
@@ -115,6 +139,7 @@ class ClipAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        private const val TAG = "ClipIt"
         private const val EVENTS = AccessibilityEvent.TYPE_VIEW_CLICKED or
             AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED or
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED

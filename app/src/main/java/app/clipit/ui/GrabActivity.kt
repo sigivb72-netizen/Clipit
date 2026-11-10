@@ -28,16 +28,19 @@ class GrabActivity : Activity() {
 
     private fun finishWith(text: CharSequence?) {
         handled = true
-        val message = when (Links.handle(this, text, auto = false)) {
+        // Launched by the copy detector: stay silent unless something starts.
+        val auto = intent?.action == ACTION_AUTO
+        val message = when (Links.handle(this, text, auto)) {
             Links.Outcome.QUEUED -> "Clip It: download started"
-            Links.Outcome.DUPLICATE -> "Clip It: already downloading that link"
-            else -> "Clip It: no link found"
+            Links.Outcome.DUPLICATE -> "Clip It: already downloading that link".takeUnless { auto }
+            else -> "Clip It: no link found".takeUnless { auto }
         }
-        Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
+        if (message != null) Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
         finish()
     }
 
     companion object {
         const val ACTION_CLIPBOARD = "app.clipit.GRAB_CLIPBOARD"
+        const val ACTION_AUTO = "app.clipit.GRAB_AUTO"
     }
 }
